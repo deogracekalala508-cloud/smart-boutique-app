@@ -13,11 +13,9 @@ backend/sauvegardes/
 
 # Logs
 *.log
-logs/
 
 # Build
 frontend/build/
-frontend/.cache/
 
 # OS
 .DS_Store
@@ -26,7 +24,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
-*.swp
 
-# Uploads temporaires
+# Uploads
 backend/uploads/
