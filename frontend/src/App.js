@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const API_URL = 'http://127.0.0.1:5000/api';
+const API_URL = 'https://smart-boutique-3bfg.onrender.com/api';
 
 // Intercepteur global : si le token est expire ou invalide, l'API renvoie 401
 // et on force une deconnexion propre plutot que de laisser chaque appel
@@ -114,6 +114,7 @@ function App() {
         chargerBoutiques();
       }
     }
+
   }, [connecte]);
 
   const chargerArticles = async () => {
@@ -230,7 +231,7 @@ function App() {
     }
 
     try {
-      const response = await axios.post(`${API_URL}/auth/login`, {
+      const response = await axios.post(`${ https://smart-boutique-3bfg.onrender.com}/auth/login`, {
         email: email, mot_de_passe: motDePasse
       });
 
