@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const API_URL = 'https://smart-boutique-3bfg.onrender.com/api';
+const API_URL = 'https://smart-boutique-app-production.up.railway.app/api';
 
 function App() {
   const [email, setEmail] = useState('');
