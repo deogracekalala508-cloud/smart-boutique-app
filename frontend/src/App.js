@@ -3,7 +3,17 @@ import axios from 'axios';
 
 const API_URL = 'https://smart-boutique-app-production-bbdb.up.railway.app/api';
 
+const TYPES_PRODUITS = {
+  vetement: { label: 'Vêtement / Textile', attr1: 'Taille', attr2: 'Couleur' },
+  telephone: { label: 'Téléphone / Mobile', attr1: 'Modèle', attr2: 'Couleur' },
+  accessoire: { label: 'Accessoire', attr1: 'Type', attr2: 'Couleur' },
+  machine: { label: 'Machine / Équipement', attr1: 'Modèle', attr2: 'Référence' },
+  chaussure: { label: 'Chaussure', attr1: 'Pointure', attr2: 'Couleur' },
+  autre: { label: 'Autre produit', attr1: 'Attribut 1', attr2: 'Attribut 2' }
+};
+
 function App() {
+  const [chargement, setChargement] = useState(true);
   const [email, setEmail] = useState('');
   const [motDePasse, setMotDePasse] = useState('');
   const [connecte, setConnecte] = useState(false);
@@ -30,8 +40,10 @@ function App() {
   });
   const [nouvelArticle, setNouvelArticle] = useState({
     reference: '', nom: '', description: '', prix_achat: '',
-    prix_vente: '', quantite_stock: '', taille: '', couleur: ''
+    prix_vente: '', quantite_stock: '', type_produit: 'vetement', taille: '', couleur: ''
   });
+  const [vendeurs, setVendeurs] = useState([]);
+  const [nouveauVendeur, setNouveauVendeur] = useState({ nom: '', email: '', mot_de_passe: '' });
   
   const [modeInscription, setModeInscription] = useState(false);
   const [nomBoutique, setNomBoutique] = useState('');
@@ -42,13 +54,40 @@ function App() {
   const [codeVerification, setCodeVerification] = useState('');
   const [boutiques, setBoutiques] = useState([]);
 
+  // Restauration de session au montage
   useEffect(() => {
-    if (connecte) {
+    const tokenStocke = localStorage.getItem('token');
+    const userStocke = localStorage.getItem('user');
+
+    if (tokenStocke && userStocke) {
+      try {
+        const userObjet = JSON.parse(userStocke);
+        setToken(tokenStocke);
+        setUser(userObjet);
+        setConnecte(true);
+        if (userObjet.role === 'vendeur') {
+          setOngletActif('vente');
+        } else if (userObjet.role === 'super_admin') {
+          setOngletActif('boutiques');
+        } else {
+          setOngletActif('dashboard');
+        }
+      } catch (e) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+    }
+    setChargement(false);
+  }, []);
+
+  useEffect(() => {
+    if (connecte && user) {
       if (user.role === 'admin') {
         chargerArticles();
         chargerVentesJour();
         chargerHistoriqueVentes();
         chargerClients();
+        chargerVendeurs();
       }
       if (user.role === 'vendeur') {
         chargerArticles();
@@ -111,6 +150,52 @@ function App() {
       setBoutiques(response.data);
     } catch (error) {
       console.error('Erreur chargement boutiques:', error);
+    }
+  };
+
+  const chargerVendeurs = async () => {
+    try {
+      const response = await axios.get(API_URL + '/boutiques/vendeurs', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      setVendeurs(response.data);
+    } catch (error) {
+      console.error('Erreur chargement vendeurs:', error);
+    }
+  };
+
+  const handleAjouterVendeur = async () => {
+    if (!nouveauVendeur.nom || !nouveauVendeur.email || !nouveauVendeur.mot_de_passe) {
+      alert('Tous les champs du vendeur sont obligatoires');
+      return;
+    }
+    if (nouveauVendeur.mot_de_passe.length < 8) {
+      alert('Le mot de passe doit contenir au moins 8 caractères');
+      return;
+    }
+    try {
+      await axios.post(API_URL + '/boutiques/creer-vendeur', nouveauVendeur, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      alert('Vendeur créé avec succès !');
+      setNouveauVendeur({ nom: '', email: '', mot_de_passe: '' });
+      chargerVendeurs();
+    } catch (error) {
+      alert('Erreur : ' + (error.response ? error.response.data.message : 'Erreur ajout vendeur'));
+    }
+  };
+
+  const handleDesactiverVendeur = async (id) => {
+    if (window.confirm('Désactiver ce vendeur ?')) {
+      try {
+        await axios.delete(API_URL + '/boutiques/vendeur/' + id, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        alert('Vendeur désactivé');
+        chargerVendeurs();
+      } catch (error) {
+        alert('Erreur');
+      }
     }
   };
 
@@ -184,6 +269,8 @@ function App() {
       
       if (response.data.user.role === 'vendeur') {
         setOngletActif('vente');
+      } else if (response.data.user.role === 'super_admin') {
+        setOngletActif('boutiques');
       } else {
         setOngletActif('dashboard');
       }
@@ -279,6 +366,7 @@ function App() {
     setShowDetails(false);
     setShowClientDetails(false);
     setBoutiques([]);
+    setVendeurs([]);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   };
@@ -289,7 +377,10 @@ function App() {
         headers: { Authorization: 'Bearer ' + token }
       });
       alert('Article ajoute !');
-      setNouvelArticle({ reference: '', nom: '', description: '', prix_achat: '', prix_vente: '', quantite_stock: '', taille: '', couleur: '' });
+      setNouvelArticle({
+        reference: '', nom: '', description: '', prix_achat: '',
+        prix_vente: '', quantite_stock: '', type_produit: 'vetement', taille: '', couleur: ''
+      });
       chargerArticles();
     } catch (error) {
       alert('Erreur : ' + (error.response ? error.response.data.message : 'Erreur ajout'));
@@ -382,7 +473,7 @@ function App() {
   };
 
   const handleImprimerFacture = (numeroFacture) => {
-    const url = 'https://smart-boutique-3bfg.onrender.com/api/ventes/facture-html/' + numeroFacture;
+    const url = API_URL + '/ventes/facture-html/' + numeroFacture + '?token=' + token;
     const win = window.open(url, '_blank', 'width=600,height=800');
     if (!win) alert('Veuillez autoriser les pop-ups');
   };
@@ -410,6 +501,14 @@ function App() {
   };
 
   const totalPanier = panier.reduce((total, item) => total + (item.prix_vente * item.quantite), 0);
+
+  if (chargement) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #1a237e 0%, #4a148c 100%)', color: 'white', fontFamily: 'Arial' }}>
+        <h2 style={{ fontSize: '24px' }}>Chargement de Smart Boutique...</h2>
+      </div>
+    );
+  }
 
   if (!connecte) {
     return (
@@ -467,7 +566,7 @@ function App() {
     );
   }
 
-  if (user.role === 'super_admin') {
+  if (user && user.role === 'super_admin') {
     return (
       <div style={{ fontFamily: 'Arial', minHeight: '100vh', background: '#f5f5f5' }}>
         <nav style={{ background: '#1a237e', color: 'white', padding: '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -524,7 +623,7 @@ function App() {
     );
   }
 
-  if (user.role === 'vendeur') {
+  if (user && user.role === 'vendeur') {
     return (
       <div style={{ fontFamily: 'Arial', minHeight: '100vh', background: '#f0f0f0' }}>
         <div style={{ background: '#1a237e', color: 'white', padding: '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -594,6 +693,10 @@ function App() {
     );
   }
 
+  const typeActuel = nouvelArticle.type_produit || 'vetement';
+  const attr1Label = TYPES_PRODUITS[typeActuel]?.attr1 || 'Attribut 1';
+  const attr2Label = TYPES_PRODUITS[typeActuel]?.attr2 || 'Attribut 2';
+
   return (
     <div style={{ fontFamily: 'Arial', minHeight: '100vh', background: '#f5f5f5' }}>
       <nav style={{ background: '#1a237e', color: 'white', padding: '15px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
@@ -604,9 +707,10 @@ function App() {
           <button onClick={() => setOngletActif('vente')} style={{ padding: '10px 20px', background: ongletActif === 'vente' ? '#ffd700' : 'transparent', color: ongletActif === 'vente' ? '#1a237e' : 'white', border: 'none', cursor: 'pointer', borderRadius: '5px', fontWeight: 'bold' }}>Vente</button>
           <button onClick={() => { setOngletActif('historique'); chargerHistoriqueVentes(); }} style={{ padding: '10px 20px', background: ongletActif === 'historique' ? '#ffd700' : 'transparent', color: ongletActif === 'historique' ? '#1a237e' : 'white', border: 'none', cursor: 'pointer', borderRadius: '5px', fontWeight: 'bold' }}>Historique</button>
           <button onClick={() => { setOngletActif('clients'); chargerClients(); }} style={{ padding: '10px 20px', background: ongletActif === 'clients' ? '#ffd700' : 'transparent', color: ongletActif === 'clients' ? '#1a237e' : 'white', border: 'none', cursor: 'pointer', borderRadius: '5px', fontWeight: 'bold' }}>Clients</button>
+          <button onClick={() => { setOngletActif('vendeurs'); chargerVendeurs(); }} style={{ padding: '10px 20px', background: ongletActif === 'vendeurs' ? '#ffd700' : 'transparent', color: ongletActif === 'vendeurs' ? '#1a237e' : 'white', border: 'none', cursor: 'pointer', borderRadius: '5px', fontWeight: 'bold' }}>Vendeurs</button>
         </div>
         <div>
-          <span style={{ marginRight: '15px', fontWeight: 'bold' }}>{user.nom}</span>
+          <span style={{ marginRight: '15px', fontWeight: 'bold' }}>{user ? user.nom : ''}</span>
           <button onClick={handleLogout} style={{ padding: '8px 15px', background: '#ff6b6b', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Deconnexion</button>
         </div>
       </nav>
@@ -653,13 +757,22 @@ function App() {
             <div style={{ background: 'white', padding: '25px', borderRadius: '10px', marginBottom: '20px' }}>
               <h3>Ajouter un article</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                <select
+                  value={typeActuel}
+                  onChange={(e) => setNouvelArticle(Object.assign({}, nouvelArticle, { type_produit: e.target.value }))}
+                  style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px', background: '#f9f9f9', fontWeight: 'bold' }}
+                >
+                  {Object.entries(TYPES_PRODUITS).map(([key, val]) => (
+                    <option key={key} value={key}>{val.label}</option>
+                  ))}
+                </select>
                 <input placeholder="Reference" value={nouvelArticle.reference} onChange={(e) => setNouvelArticle(Object.assign({}, nouvelArticle, {reference: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
                 <input placeholder="Nom" value={nouvelArticle.nom} onChange={(e) => setNouvelArticle(Object.assign({}, nouvelArticle, {nom: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
                 <input placeholder="Prix achat" type="number" value={nouvelArticle.prix_achat} onChange={(e) => setNouvelArticle(Object.assign({}, nouvelArticle, {prix_achat: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
                 <input placeholder="Prix vente" type="number" value={nouvelArticle.prix_vente} onChange={(e) => setNouvelArticle(Object.assign({}, nouvelArticle, {prix_vente: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
                 <input placeholder="Quantite" type="number" value={nouvelArticle.quantite_stock} onChange={(e) => setNouvelArticle(Object.assign({}, nouvelArticle, {quantite_stock: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
-                <input placeholder="Taille" value={nouvelArticle.taille} onChange={(e) => setNouvelArticle(Object.assign({}, nouvelArticle, {taille: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
-                <input placeholder="Couleur" value={nouvelArticle.couleur} onChange={(e) => setNouvelArticle(Object.assign({}, nouvelArticle, {couleur: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
+                <input placeholder={attr1Label} value={nouvelArticle.taille} onChange={(e) => setNouvelArticle(Object.assign({}, nouvelArticle, {taille: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
+                <input placeholder={attr2Label} value={nouvelArticle.couleur} onChange={(e) => setNouvelArticle(Object.assign({}, nouvelArticle, {couleur: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
               </div>
               <button onClick={handleAjouterArticle} style={{ width: '100%', padding: '12px', background: '#1a237e', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', marginTop: '15px' }}>Ajouter</button>
             </div>
@@ -691,6 +804,56 @@ function App() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {ongletActif === 'vendeurs' && (
+          <div>
+            <h2>Gestion des vendeurs</h2>
+            <div style={{ background: 'white', padding: '25px', borderRadius: '10px', marginBottom: '20px' }}>
+              <h3>Ajouter un vendeur</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                <input placeholder="Nom du vendeur" value={nouveauVendeur.nom} onChange={(e) => setNouveauVendeur(Object.assign({}, nouveauVendeur, {nom: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
+                <input placeholder="Email" type="email" value={nouveauVendeur.email} onChange={(e) => setNouveauVendeur(Object.assign({}, nouveauVendeur, {email: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
+                <input placeholder="Mot de passe (8+ car.)" type="password" value={nouveauVendeur.mot_de_passe} onChange={(e) => setNouveauVendeur(Object.assign({}, nouveauVendeur, {mot_de_passe: e.target.value}))} style={{ padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }} />
+              </div>
+              <button onClick={handleAjouterVendeur} style={{ width: '100%', padding: '12px', background: '#1a237e', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', marginTop: '15px', fontWeight: 'bold' }}>Créer le vendeur</button>
+            </div>
+            <div style={{ background: 'white', padding: '25px', borderRadius: '10px', overflowX: 'auto' }}>
+              <h3>Liste des vendeurs ({vendeurs.length})</h3>
+              {vendeurs.length === 0 ? (
+                <p style={{ color: '#999', textAlign: 'center', padding: '30px' }}>Aucun vendeur</p>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#1a237e', color: 'white' }}>
+                      <th style={{ padding: '12px', textAlign: 'left' }}>Nom</th>
+                      <th style={{ padding: '12px', textAlign: 'left' }}>Email</th>
+                      <th style={{ padding: '12px', textAlign: 'center' }}>Statut</th>
+                      <th style={{ padding: '12px', textAlign: 'center' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vendeurs.map(v => (
+                      <tr key={v.id} style={{ borderBottom: '1px solid #eee' }}>
+                        <td style={{ padding: '10px', fontWeight: 'bold' }}>{v.nom}</td>
+                        <td style={{ padding: '10px' }}>{v.email}</td>
+                        <td style={{ padding: '10px', textAlign: 'center' }}>
+                          <span style={{ padding: '5px 12px', borderRadius: '15px', fontSize: '12px', fontWeight: 'bold', background: v.actif ? '#e8f5e9' : '#ffebee', color: v.actif ? '#2e7d32' : '#c62828' }}>
+                            {v.actif ? 'Actif' : 'Désactivé'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '10px', textAlign: 'center' }}>
+                          {v.actif && (
+                            <button onClick={() => handleDesactiverVendeur(v.id)} style={{ padding: '8px 15px', background: '#ff6b6b', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>Désactiver</button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         )}

@@ -231,4 +231,92 @@ router.put('/:id/reactiver', authenticate, authorize('super_admin'), async (req,
   }
 });
 
+// ADMIN BOUTIQUE : Créer un vendeur
+router.post('/creer-vendeur', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const { nom, email, mot_de_passe } = req.body;
+    const boutiqueId = req.user.boutique_id;
+
+    if (!boutiqueId) {
+      return res.status(400).json({ message: 'Aucune boutique associée à ce compte' });
+    }
+
+    if (!nom || !email || !mot_de_passe) {
+      return res.status(400).json({ message: 'Tous les champs obligatoires doivent être remplis' });
+    }
+
+    if (mot_de_passe.length < 8) {
+      return res.status(400).json({ message: 'Le mot de passe doit contenir au moins 8 caractères' });
+    }
+
+    const emailNormalise = email.toLowerCase().trim();
+    const [existingUser] = await pool.query(
+      'SELECT id FROM utilisateurs WHERE LOWER(email) = ?',
+      [emailNormalise]
+    );
+
+    if (existingUser.length > 0) {
+      return res.status(400).json({ message: 'Cet email est déjà utilisé' });
+    }
+
+    const motDePasseHash = await bcrypt.hash(mot_de_passe, 14);
+
+    const [result] = await pool.query(
+      'INSERT INTO utilisateurs (nom, email, mot_de_passe, role, actif, boutique_id) VALUES (?, ?, ?, ?, true, ?)',
+      [nom.trim(), emailNormalise, motDePasseHash, 'vendeur', boutiqueId]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Vendeur créé avec succès !',
+      vendeurId: result.insertId
+    });
+
+  } catch (error) {
+    console.error('Erreur création vendeur:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// ADMIN BOUTIQUE : Liste des vendeurs de SA boutique
+router.get('/vendeurs', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const boutiqueId = req.user.boutique_id;
+
+    const [vendeurs] = await pool.query(
+      `SELECT id, nom, email, role, actif, created_at
+       FROM utilisateurs
+       WHERE boutique_id = ? AND role = 'vendeur'
+       ORDER BY created_at DESC`,
+      [boutiqueId]
+    );
+
+    res.json(vendeurs);
+  } catch (error) {
+    console.error('Erreur liste vendeurs:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// ADMIN BOUTIQUE : Désactiver/Supprimer un vendeur
+router.delete('/vendeur/:id', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    const boutiqueId = req.user.boutique_id;
+
+    const [result] = await pool.query(
+      'UPDATE utilisateurs SET actif = false WHERE id = ? AND boutique_id = ? AND role = \'vendeur\'',
+      [req.params.id, boutiqueId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Vendeur introuvable dans votre boutique' });
+    }
+
+    res.json({ success: true, message: 'Vendeur désactivé' });
+  } catch (error) {
+    console.error('Erreur désactivation vendeur:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;

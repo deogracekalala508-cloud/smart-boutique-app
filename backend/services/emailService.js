@@ -15,12 +15,20 @@ const transporter = nodemailer.createTransport({
 
 async function verifierConfiguration() {
   try {
+    const service = (process.env.EMAIL_SERVICE || '').toLowerCase();
+    if (service === 'brevo') {
+      console.log('✅ Service email configuré sur Brevo API');
+      return true;
+    }
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-      console.log('⚠️ Email non configuré dans .env');
+      console.log('ℹ️ Mode test email actif (console log)');
       return false;
     }
-    await transporter.verify();
-    console.log('✅ Service email configuré correctement');
+    transporter.verify().then(() => {
+      console.log('✅ Service email SMTP vérifié');
+    }).catch(err => {
+      console.log('⚠️ SMTP indisponible (Port 587 bloqué), mode console/log actif.');
+    });
     return true;
   } catch (error) {
     console.error('❌ Erreur configuration email:', error.message);
@@ -28,80 +36,66 @@ async function verifierConfiguration() {
   }
 }
 
-async function envoyerCodeVerification(email, code, nomBoutique) {
+async function envoyerEmailBrevo(email, code, nomBoutique) {
   try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-      console.log('\n========================================');
-      console.log('📧 MODE TEST - CODE DE VÉRIFICATION');
-      console.log('========================================');
-      console.log(`Email : ${email}`);
-      console.log(`Boutique : ${nomBoutique}`);
-      console.log(`CODE : ${code}`);
-      console.log('========================================\n');
-      return { success: true, mode: 'test' };
+    const apiKey = process.env.BREVO_API_KEY;
+    if (!apiKey) {
+      console.log('⚠️ BREVO_API_KEY non définie, fallback console.');
+      return null;
     }
-
-    const mailOptions = {
-      from: `"Smart Boutique" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: `🔐 Code de vérification - Smart Boutique`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
-            .container { max-width: 500px; margin: 0 auto; background: white; border-radius: 15px; overflow: hidden; }
-            .header { background: linear-gradient(135deg, #1a237e 0%, #4a148c 100%); color: white; padding: 30px; text-align: center; }
-            .content { padding: 40px 30px; text-align: center; }
-            .code { background: #f0f4ff; border: 2px dashed #1a237e; border-radius: 10px; padding: 20px; margin: 20px 0; }
-            .code span { font-size: 42px; font-weight: bold; color: #1a237e; letter-spacing: 10px; }
-            .warning { background: #fff3e0; border-left: 4px solid #ff9800; padding: 15px; margin: 20px 0; text-align: left; font-size: 13px; }
-            .footer { background: #f5f5f5; padding: 20px; text-align: center; font-size: 12px; color: #999; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>🏪 Smart Boutique</h1>
-              <p>Vérification de votre compte</p>
-            </div>
-            <div class="content">
-              <h2>Bonjour ${nomBoutique} 👋</h2>
-              <p>Voici votre code de vérification :</p>
-              <div class="code"><span>${code}</span></div>
-              <p>⏱️ Valable pendant <strong>10 minutes</strong></p>
-              <div class="warning">
-                <strong>⚠️ Important :</strong><br>
-                Ne partagez jamais ce code avec personne.
-              </div>
-            </div>
-            <div class="footer">
-              <p><strong>Smart Boutique</strong></p>
-              <p>📱 WhatsApp : 0999068332</p>
-              <p>📧 eventcheck.contact@gmail.com</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Email envoyé à:', email);
-    return { success: true, messageId: info.messageId };
-    
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'accept': 'application/json',
+        'api-key': apiKey,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: { name: "Smart Boutique", email: process.env.EMAIL_USER || "noreply@smartboutique.com" },
+        to: [{ email: email }],
+        subject: "🔐 Code de vérification - Smart Boutique",
+        htmlContent: `<h2>Bonjour ${nomBoutique}</h2><p>Voici votre code de vérification : <strong>${code}</strong></p>`
+      })
+    });
+    const data = await response.json();
+    return { success: true, brevoResponse: data };
   } catch (error) {
-    console.error('❌ Erreur envoi email:', error.message);
-    // En cas d'erreur, on affiche quand même le code dans la console
-    console.log('\n========================================');
-    console.log('📧 CODE DE SECOURS (email non envoyé)');
-    console.log('========================================');
-    console.log(`Email : ${email}`);
-    console.log(`CODE : ${code}`);
-    console.log('========================================\n');
-    return { success: false, error: error.message, code: code };
+    console.error('Erreur API Brevo:', error.message);
+    return null;
   }
+}
+
+async function envoyerCodeVerification(email, code, nomBoutique) {
+  const service = (process.env.EMAIL_SERVICE || '').toLowerCase();
+
+  if (service === 'brevo') {
+    const brevoResult = await envoyerEmailBrevo(email, code, nomBoutique);
+    if (brevoResult) return brevoResult;
+  }
+
+  console.log('\n========================================');
+  console.log('📧 CODE DE VÉRIFICATION SMART BOUTIQUE');
+  console.log('========================================');
+  console.log(`Boutique : ${nomBoutique}`);
+  console.log(`Email    : ${email}`);
+  console.log(`CODE     : ${code}`);
+  console.log('========================================\n');
+
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASSWORD && service === 'smtp') {
+    try {
+      await transporter.sendMail({
+        from: `"Smart Boutique" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: `🔐 Code de vérification - Smart Boutique`,
+        html: `<p>Bonjour ${nomBoutique}, votre code est : <strong>${code}</strong></p>`
+      });
+      console.log('✅ Email SMTP envoyé à:', email);
+    } catch (err) {
+      console.log('⚠️ SMTP échoué, code disponible dans la console.');
+    }
+  }
+
+  return { success: true, mode: 'test', code: code };
 }
 
 module.exports = { envoyerCodeVerification, verifierConfiguration };

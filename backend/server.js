@@ -51,6 +51,8 @@ const limiteurGlobal = rateLimit({
 });
 app.use('/api/', limiteurGlobal);
 
+const bcrypt = require('bcryptjs');
+const { pool } = require('./config/database');
 const { initialiserTablesAutomatique } = require('./services/initTablesService');
 
 app.get('/api/init-db', async (req, res) => {
@@ -59,6 +61,41 @@ app.get('/api/init-db', async (req, res) => {
     res.json({ success: true, message: 'Tables MySQL initialisees avec succes !' });
   } else {
     res.status(500).json({ success: false, message: 'Erreur lors de l\'initialisation des tables' });
+  }
+});
+
+app.get('/api/creer-super-admin', async (req, res) => {
+  try {
+    const emailSuperAdmin = 'superadmin@smartboutique.com';
+    const [existing] = await pool.query(
+      'SELECT id FROM utilisateurs WHERE LOWER(email) = ?',
+      [emailSuperAdmin]
+    );
+
+    if (existing.length > 0) {
+      return res.json({
+        success: true,
+        message: 'Le compte Super Admin existe déjà !',
+        email: emailSuperAdmin
+      });
+    }
+
+    const motDePasseHash = await bcrypt.hash('SuperAdmin2026!', 14);
+
+    await pool.query(
+      'INSERT INTO utilisateurs (nom, email, mot_de_passe, role, actif, boutique_id) VALUES (?, ?, ?, ?, true, NULL)',
+      ['Super Admin', emailSuperAdmin, motDePasseHash, 'super_admin']
+    );
+
+    res.json({
+      success: true,
+      message: 'Compte Super Admin créé avec succès !',
+      email: emailSuperAdmin
+    });
+
+  } catch (error) {
+    console.error('Erreur création super admin:', error);
+    res.status(500).json({ message: 'Erreur lors de la création du compte Super Admin: ' + error.message });
   }
 });
 

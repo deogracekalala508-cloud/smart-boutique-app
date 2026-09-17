@@ -21,6 +21,7 @@ const config = {
   connectionLimit: 10,
   queueLimit: 0,
   enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
   connectTimeout: 30000,
   ...(sslOption && { ssl: sslOption })
 };
@@ -32,6 +33,7 @@ const pool = (process.env.MYSQL_URL || process.env.DATABASE_URL)
       connectionLimit: 10,
       queueLimit: 0,
       enableKeepAlive: true,
+      keepAliveInitialDelay: 0,
       connectTimeout: 30000,
       ...(sslOption && { ssl: sslOption })
     })
