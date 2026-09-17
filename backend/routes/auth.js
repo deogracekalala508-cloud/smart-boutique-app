@@ -55,7 +55,14 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: MESSAGE_GENERIQUE });
     }
 
-    // Bloquer l'accès et signaler la désactivation de la boutique
+    // Auto-réparation : Si la boutique a été réactivée par le Super Admin (boutique_active == true/1),
+    // on réactive automatiquement les comptes associés s'ils étaient restés désactivés.
+    if (user.boutique_id && (user.boutique_active === 1 || user.boutique_active === true) && (!user.actif || user.actif === 0)) {
+      await pool.query('UPDATE utilisateurs SET actif = true WHERE boutique_id = ?', [user.boutique_id]);
+      user.actif = true;
+    }
+
+    // Bloquer l'accès et signaler la désactivation si la boutique est réellement désactivée
     if (!user.actif || (user.boutique_id && (user.boutique_active === 0 || user.boutique_active === false))) {
       return res.status(403).json({
         boutique_desactivee: true,

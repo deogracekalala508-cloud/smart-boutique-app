@@ -313,13 +313,23 @@ router.delete('/:id', authenticate, authorize('super_admin'), async (req, res) =
   }
 });
 
-// SUPER ADMIN : Reactiver une boutique
+// SUPER ADMIN : Reactiver une boutique et tous ses utilisateurs associés
 router.put('/:id/reactiver', authenticate, authorize('super_admin'), async (req, res) => {
+  const connection = await pool.getConnection();
   try {
-    await pool.query('UPDATE boutiques SET actif = true WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Boutique reactivee' });
+    await connection.beginTransaction();
+
+    await connection.query('UPDATE boutiques SET actif = true WHERE id = ?', [req.params.id]);
+    await connection.query('UPDATE utilisateurs SET actif = true WHERE boutique_id = ?', [req.params.id]);
+
+    await connection.commit();
+    res.json({ success: true, message: 'Boutique et utilisateurs réactivés avec succès' });
   } catch (error) {
-    res.status(500).json({ message: 'Erreur serveur' });
+    await connection.rollback();
+    console.error('Erreur réactivation boutique:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la réactivation' });
+  } finally {
+    connection.release();
   }
 });
 
