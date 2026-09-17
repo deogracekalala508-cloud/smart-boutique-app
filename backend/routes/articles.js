@@ -39,7 +39,7 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
   try {
     const {
       reference, nom, description, prix_achat, prix_vente, quantite_stock,
-      categorie, taille, couleur, numero_serie, garantie_mois
+      type_produit, taille, couleur, numero_serie, garantie_mois
     } = req.body;
     const boutiqueId = req.user.boutique_id;
 
@@ -55,10 +55,6 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
       return res.status(400).json({ message: 'Les prix doivent etre positifs' });
     }
 
-    if (categorie && !CATEGORIES_VALIDES.includes(categorie)) {
-      return res.status(400).json({ message: `Categorie invalide. Valeurs acceptees : ${CATEGORIES_VALIDES.join(', ')}` });
-    }
-
     const [existing] = await pool.query(
       'SELECT id, nom FROM articles WHERE reference = ? AND boutique_id = ? AND actif = true',
       [reference, boutiqueId]
@@ -72,12 +68,11 @@ router.post('/', authenticate, authorize('admin'), async (req, res) => {
 
     const [result] = await pool.query(
       `INSERT INTO articles
-        (reference, nom, description, prix_achat, prix_vente, quantite_stock, categorie, taille, couleur, numero_serie, garantie_mois, boutique_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (reference, nom, description, prix_achat, prix_vente, quantite_stock, type_produit, taille, couleur, boutique_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         reference, nom, description, prix_achat, prix_vente, quantite_stock || 0,
-        categorie || 'autre', taille || null, couleur || null, numero_serie || null,
-        garantie_mois || null, boutiqueId
+        type_produit || 'vetement', taille || null, couleur || null, boutiqueId
       ]
     );
 

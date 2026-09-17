@@ -38,6 +38,7 @@ async function initialiserTablesAutomatique() {
         prix_achat DECIMAL(10,2) NOT NULL,
         prix_vente DECIMAL(10,2) NOT NULL,
         quantite_stock INT DEFAULT 0,
+        type_produit VARCHAR(50) DEFAULT 'vetement',
         taille VARCHAR(20),
         couleur VARCHAR(50),
         boutique_id INT DEFAULT NULL,
@@ -46,6 +47,10 @@ async function initialiserTablesAutomatique() {
         UNIQUE KEY unique_ref_boutique (reference, boutique_id)
       );
     `);
+
+    try {
+      await pool.query("ALTER TABLE articles ADD COLUMN type_produit VARCHAR(50) DEFAULT 'vetement'");
+    } catch (e) {}
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS clients (
