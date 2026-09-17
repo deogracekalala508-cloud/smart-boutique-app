@@ -331,14 +331,14 @@ router.get('/stats-dashboard', authenticate, async (req, res) => {
 
     const [repartitionCategories] = await pool.query(`
       SELECT 
-        COALESCE(a.categorie, 'vetement') as type_produit,
+        COALESCE(a.type_produit, 'vetement') as type_produit,
         COALESCE(SUM(vd.quantite), 0) as quantite_vendue,
         COALESCE(SUM(vd.prix_unitaire * vd.quantite), 0) as montant_total
       FROM ventes_details vd
       JOIN articles a ON vd.article_id = a.id
       JOIN ventes v ON vd.vente_id = v.id
       WHERE v.boutique_id = ?
-      GROUP BY COALESCE(a.categorie, 'vetement')
+      GROUP BY COALESCE(a.type_produit, 'vetement')
     `, [boutiqueId]);
 
     const [topProduits] = await pool.query(`
