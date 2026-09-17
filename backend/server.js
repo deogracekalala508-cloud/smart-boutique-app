@@ -51,6 +51,17 @@ const limiteurGlobal = rateLimit({
 });
 app.use('/api/', limiteurGlobal);
 
+const { initialiserTablesAutomatique } = require('./services/initTablesService');
+
+app.get('/api/init-db', async (req, res) => {
+  const ok = await initialiserTablesAutomatique();
+  if (ok) {
+    res.json({ success: true, message: 'Tables MySQL initialisees avec succes !' });
+  } else {
+    res.status(500).json({ success: false, message: 'Erreur lors de l\'initialisation des tables' });
+  }
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/articles', articlesRoutes);
 app.use('/api/ventes', ventesRoutes);
@@ -65,6 +76,12 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, async () => {
   console.log(`Serveur Smart Boutique demarre sur http://localhost:${PORT}`);
+
+  try {
+    await initialiserTablesAutomatique();
+  } catch (err) {
+    console.error('Erreur init tables:', err.message);
+  }
 
   try {
     const { verifierConfiguration } = require('./services/emailService');
