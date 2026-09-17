@@ -77,11 +77,14 @@ router.post('/inscription-directe', limiterInscription, async (req, res) => {
     }
 
     const [existingBoutique] = await connection.query(
-      'SELECT id FROM boutiques WHERE LOWER(nom) = ? AND actif = true',
+      'SELECT id, actif FROM boutiques WHERE LOWER(nom) = ?',
       [nom_boutique.toLowerCase().trim()]
     );
     if (existingBoutique.length > 0) {
       connection.release();
+      if (!existingBoutique[0].actif) {
+        return res.status(403).json({ boutique_desactivee: true, message: 'Cette boutique a été désactivée par l\'administrateur. La création de compte est suspendue.' });
+      }
       return res.status(400).json({ message: 'Ce nom de boutique est déjà utilisé' });
     }
 

@@ -105,6 +105,7 @@ function App() {
 
   // ─── Inscription boutique ─────────────────────────────────────────────────
   const [modeInscription, setModeInscription] = useState(false);
+  const [boutiqueBloquee, setBoutiqueBloquee] = useState(false);
   const [nomBoutique, setNomBoutique] = useState('');
   const [nomAdmin, setNomAdmin] = useState('');
   const [telephone, setTelephone] = useState('');
@@ -270,6 +271,7 @@ function App() {
     if (motDePasse.length < 8) {
       setMessage('Le mot de passe doit contenir au moins 8 caractères'); return;
     }
+    setBoutiqueBloquee(false);
     try {
       const response = await axios.post(API_URL + '/boutiques/inscription-directe', {
         nom_boutique: nomBoutique, nom_admin: nomAdmin,
@@ -285,12 +287,19 @@ function App() {
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
     } catch (error) {
-      setMessage(error.response ? error.response.data.message : 'Impossible de contacter le serveur. Vérifiez votre connexion internet.');
+      if (error.response && error.response.data && error.response.data.boutique_desactivee) {
+        setBoutiqueBloquee(true);
+        setModeInscription(false);
+        setMessage(error.response.data.message);
+      } else {
+        setMessage(error.response ? error.response.data.message : 'Impossible de contacter le serveur. Vérifiez votre connexion internet.');
+      }
     }
   };
 
   const handleLogin = async () => {
     if (!email || !motDePasse) { setMessage('Veuillez remplir tous les champs'); return; }
+    setBoutiqueBloquee(false);
     try {
       const response = await axios.post(API_URL + '/auth/login', {
         email, mot_de_passe: motDePasse
@@ -307,7 +316,13 @@ function App() {
       localStorage.setItem('user', JSON.stringify(data.user));
     } catch (error) {
       if (error.response) {
-        setMessage(error.response.data.message || 'Email ou mot de passe incorrect');
+        if (error.response.data && error.response.data.boutique_desactivee) {
+          setBoutiqueBloquee(true);
+          setModeInscription(false);
+          setMessage(error.response.data.message || 'Cette boutique a été désactivée par l\'administrateur.');
+        } else {
+          setMessage(error.response.data.message || 'Email ou mot de passe incorrect');
+        }
       } else {
         setMessage('Impossible de contacter le serveur. Vérifiez votre connexion internet.');
       }
@@ -651,12 +666,14 @@ function App() {
             </div>
           )}
 
-          <div style={{ marginTop: '24px', fontSize: '14px', color: '#64748b', textAlign: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
-            {modeInscription ? 'Vous possédez déjà un compte ?' : 'Vous n\'avez pas encore de compte ?'}
-            <button onClick={() => { setModeInscription(!modeInscription); setMessage(''); }} style={{ background: 'none', border: 'none', color: '#4f46e5', cursor: 'pointer', fontWeight: '600', fontSize: '14px', marginLeft: '6px' }}>
-              {modeInscription ? 'Se connecter' : 'Créer un compte'}
-            </button>
-          </div>
+          {!boutiqueBloquee && (
+            <div style={{ marginTop: '24px', fontSize: '14px', color: '#64748b', textAlign: 'center', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
+              {modeInscription ? 'Vous possédez déjà un compte ?' : 'Vous n\'avez pas encore de compte ?'}
+              <button onClick={() => { setModeInscription(!modeInscription); setMessage(''); }} style={{ background: 'none', border: 'none', color: '#4f46e5', cursor: 'pointer', fontWeight: '600', fontSize: '14px', marginLeft: '6px' }}>
+                {modeInscription ? 'Se connecter' : 'Créer un compte'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

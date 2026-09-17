@@ -40,7 +40,7 @@ router.post('/login', async (req, res) => {
     }
 
     const [users] = await pool.query(
-      'SELECT u.*, b.nom as nom_boutique, b.actif as boutique_active FROM utilisateurs u LEFT JOIN boutiques b ON u.boutique_id = b.id WHERE LOWER(u.email) = ? AND u.actif = true',
+      'SELECT u.*, b.nom as nom_boutique, b.actif as boutique_active FROM utilisateurs u LEFT JOIN boutiques b ON u.boutique_id = b.id WHERE LOWER(u.email) = ?',
       [emailNormalise]
     );
 
@@ -55,8 +55,12 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: MESSAGE_GENERIQUE });
     }
 
-    if (user.boutique_id && !user.boutique_active) {
-      return res.status(403).json({ message: 'Cette boutique est desactivee.' });
+    // Bloquer l'accès et signaler la désactivation de la boutique
+    if (!user.actif || (user.boutique_id && (user.boutique_active === 0 || user.boutique_active === false))) {
+      return res.status(403).json({
+        boutique_desactivee: true,
+        message: 'Cette boutique a été désactivée par l\'administrateur. L\'accès et la création de comptes sont suspendus.'
+      });
     }
 
     // Garde-fou contre le bug #3 : un utilisateur non-super_admin sans boutique_id
