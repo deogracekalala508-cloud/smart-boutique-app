@@ -287,4 +287,134 @@ router.get('/facture-html/:numero', authenticateFlexible, async (req, res) => {
   }
 });
 
+// STATISTIQUES AVANCÉES & ANALYSE PRÉDICTIVE DE STOCK POUR LE DASHBOARD
+router.get('/stats-dashboard', authenticate, async (req, res) => {
+  try {
+    const boutiqueId = req.user.boutique_id;
+    if (!boutiqueId) {
+      return res.status(400).json({ message: 'Aucune boutique associée' });
+    }
+
+    const [salesKpi] = await pool.query(`
+      SELECT 
+        COUNT(*) as total_ventes,
+        COALESCE(SUM(montant_final), 0) as chiffre_affaires
+      FROM ventes WHERE boutique_id = ?
+    `, [boutiqueId]);
+
+    const [beneficeKpi] = await pool.query(`
+      SELECT COALESCE(SUM((vd.prix_unitaire - a.prix_achat) * vd.quantite), 0) as benefice_total
+      FROM ventes_details vd
+      JOIN articles a ON vd.article_id = a.id
+      JOIN ventes v ON vd.vente_id = v.id
+      WHERE v.boutique_id = ?
+    `, [boutiqueId]);
+
+    const [stockKpi] = await pool.query(`
+      SELECT 
+        COUNT(*) as total_articles,
+        COALESCE(SUM(prix_vente * quantite_stock), 0) as valeur_stock,
+        COALESCE(SUM((prix_vente - prix_achat) * quantite_stock), 0) as benefice_potentiel
+      FROM articles WHERE boutique_id = ? AND actif = true
+    `, [boutiqueId]);
+
+    const [graph7Jours] = await pool.query(`
+      SELECT 
+        DATE_FORMAT(v.created_at, '%d/%m') as date,
+        COUNT(DISTINCT v.id) as nb_ventes,
+        COALESCE(SUM(v.montant_final), 0) as chiffre,
+        COALESCE(SUM((vd.prix_unitaire - a.prix_achat) * vd.quantite), 0) as benefice
+      FROM ventes v
+      LEFT JOIN ventes_details vd ON vd.vente_id = v.id
+      LEFT JOIN articles a ON vd.article_id = a.id
+      WHERE v.boutique_id = ? AND v.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+      GROUP BY DATE(v.created_at), DATE_FORMAT(v.created_at, '%d/%m')
+      ORDER BY DATE(v.created_at) ASC
+    `, [boutiqueId]);
+
+    const [repartitionCategories] = await pool.query(`
+      SELECT 
+        COALESCE(a.categorie, 'vetement') as type_produit,
+        SUM(vd.quantite) as quantite_vendue,
+        SUM(vd.prix_unitaire * vd.quantite) as montant_total
+      FROM ventes_details vd
+      JOIN articles a ON vd.article_id = a.id
+      JOIN ventes v ON vd.vente_id = v.id
+      WHERE v.boutique_id = ?
+      GROUP BY COALESCE(a.categorie, 'vetement')
+    `, [boutiqueId]);
+
+    const [topProduits] = await pool.query(`
+      SELECT 
+        a.id, a.nom, a.reference,
+        SUM(vd.quantite) as quantite_vendue,
+        SUM(vd.prix_unitaire * vd.quantite) as total_revenu
+      FROM ventes_details vd
+      JOIN articles a ON vd.article_id = a.id
+      JOIN ventes v ON vd.vente_id = v.id
+      WHERE v.boutique_id = ?
+      GROUP BY a.id, a.nom, a.reference
+      ORDER BY quantite_vendue DESC
+      LIMIT 5
+    `, [boutiqueId]);
+
+    const [articlesVitesse] = await pool.query(`
+      SELECT 
+        a.id, a.nom, a.reference, a.quantite_stock,
+        COALESCE(SUM(vd.quantite), 0) / 30.0 as vente_moyenne_jour
+      FROM articles a
+      LEFT JOIN ventes_details vd ON vd.article_id = a.id
+      LEFT JOIN ventes v ON vd.vente_id = v.id AND v.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+      WHERE a.boutique_id = ? AND a.actif = true
+      GROUP BY a.id, a.nom, a.reference, a.quantite_stock
+    `, [boutiqueId]);
+
+    const predictionsStock = articlesVitesse
+      .map(art => {
+        const stock = Number(art.quantite_stock) || 0;
+        const vitesseJour = Number(art.vente_moyenne_jour) || 0;
+        const joursRestants = vitesseJour > 0 ? Math.round(stock / vitesseJour) : (stock <= 5 ? 0 : 999);
+
+        let niveau = 'normal';
+        if (stock <= 5 || joursRestants <= 3) {
+          niveau = 'critical';
+        } else if (stock <= 10 || joursRestants <= 7) {
+          niveau = 'warning';
+        }
+
+        return {
+          id: art.id,
+          nom: art.nom,
+          reference: art.reference,
+          quantite_stock: stock,
+          vitesse_jour: Number(vitesseJour.toFixed(2)),
+          jours_restants: joursRestants,
+          niveau
+        };
+      })
+      .filter(p => p.niveau === 'critical' || p.niveau === 'warning')
+      .sort((a, b) => a.jours_restants - b.jours_restants);
+
+    res.json({
+      kpi: {
+        total_ventes: Number(salesKpi[0]?.total_ventes || 0),
+        chiffre_affaires: Number(salesKpi[0]?.chiffre_affaires || 0),
+        benefice_total: Number(beneficeKpi[0]?.benefice_total || 0),
+        panier_moyen: Number(salesKpi[0]?.total_ventes > 0 ? (salesKpi[0].chiffre_affaires / salesKpi[0].total_ventes) : 0),
+        total_articles: Number(stockKpi[0]?.total_articles || 0),
+        valeur_stock: Number(stockKpi[0]?.valeur_stock || 0),
+        benefice_potentiel: Number(stockKpi[0]?.benefice_potentiel || 0)
+      },
+      graph7Jours,
+      repartitionCategories,
+      topProduits,
+      predictionsStock
+    });
+
+  } catch (error) {
+    console.error('Erreur stats dashboard:', error);
+    res.status(500).json({ message: 'Erreur lors du calcul des statistiques' });
+  }
+});
+
 module.exports = router;

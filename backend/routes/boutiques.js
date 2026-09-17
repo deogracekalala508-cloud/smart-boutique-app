@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool } = require('../config/database');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { authenticate, authorize } = require('../middleware/auth');
 const { envoyerCodeVerification } = require('../services/emailService');
 
@@ -42,6 +43,94 @@ function limiterInscription(req, res, next) {
 
   next();
 }
+
+// INSCRIPTION DIRECTE 1-CLICK (Création boutique + admin + token instantané)
+router.post('/inscription-directe', limiterInscription, async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { nom_boutique, nom_admin, email_admin, telephone, mot_de_passe } = req.body;
+
+    if (!nom_boutique || !nom_admin || !email_admin || !mot_de_passe) {
+      connection.release();
+      return res.status(400).json({ message: 'Tous les champs obligatoires doivent être remplis' });
+    }
+
+    if (!verifierEmail(email_admin)) {
+      connection.release();
+      return res.status(400).json({ message: 'Format email invalide' });
+    }
+
+    if (mot_de_passe.length < 8) {
+      connection.release();
+      return res.status(400).json({ message: 'Le mot de passe doit faire 8 caractères minimum' });
+    }
+
+    const emailNormalise = email_admin.toLowerCase().trim();
+
+    const [existingEmail] = await connection.query(
+      'SELECT id FROM utilisateurs WHERE LOWER(email) = ?',
+      [emailNormalise]
+    );
+    if (existingEmail.length > 0) {
+      connection.release();
+      return res.status(400).json({ message: 'Cet email est déjà utilisé' });
+    }
+
+    const [existingBoutique] = await connection.query(
+      'SELECT id FROM boutiques WHERE LOWER(nom) = ? AND actif = true',
+      [nom_boutique.toLowerCase().trim()]
+    );
+    if (existingBoutique.length > 0) {
+      connection.release();
+      return res.status(400).json({ message: 'Ce nom de boutique est déjà utilisé' });
+    }
+
+    await connection.beginTransaction();
+
+    const motDePasseHash = await bcrypt.hash(mot_de_passe, 14);
+
+    const [boutiqueResult] = await connection.query(
+      'INSERT INTO boutiques (nom, proprietaire, telephone, email, actif) VALUES (?, ?, ?, ?, true)',
+      [nom_boutique.trim(), nom_admin.trim(), telephone || null, emailNormalise]
+    );
+
+    const boutiqueId = boutiqueResult.insertId;
+
+    const [userResult] = await connection.query(
+      'INSERT INTO utilisateurs (nom, email, mot_de_passe, role, actif, boutique_id) VALUES (?, ?, ?, ?, true, ?)',
+      [nom_admin.trim(), emailNormalise, motDePasseHash, 'admin', boutiqueId]
+    );
+
+    await connection.commit();
+
+    const token = jwt.sign(
+      { id: userResult.insertId, email: emailNormalise, role: 'admin', boutique_id: boutiqueId },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Boutique et compte créés avec succès !',
+      token,
+      user: {
+        id: userResult.insertId,
+        nom: nom_admin.trim(),
+        email: emailNormalise,
+        role: 'admin',
+        boutique_id: boutiqueId,
+        nom_boutique: nom_boutique.trim()
+      }
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Erreur inscription directe:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la création' });
+  } finally {
+    connection.release();
+  }
+});
 
 // INSCRIPTION ETAPE 1
 router.post('/inscription-etape1', limiterInscription, async (req, res) => {
