@@ -471,6 +471,30 @@ function App() {
     }
   };
 
+  const voirDetailsVente = async (id) => {
+    try {
+      const response = await axios.get(API_URL + '/ventes/' + id + '/details', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      setVenteDetail(response.data);
+      setShowDetails(true);
+    } catch (error) {
+      alert('Impossible de charger les détails de cette vente.');
+    }
+  };
+
+  const voirDetailsClient = async (id) => {
+    try {
+      const response = await axios.get(API_URL + '/clients/' + id, {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      setClientDetail(response.data);
+      setShowClientDetails(true);
+    } catch (error) {
+      alert('Impossible de charger les détails de ce client.');
+    }
+  };
+
   const totalPanier = panier.reduce((total, item) => total + (item.prix_vente * item.quantite), 0);
   const predictionsCount = statsDashboard?.predictionsStock?.length || 0;
 
