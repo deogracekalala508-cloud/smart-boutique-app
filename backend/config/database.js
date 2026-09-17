@@ -1,15 +1,41 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'admin123',
-  database: process.env.DB_NAME || 'gestion_boutique',
+const dbHost = process.env.MYSQLHOST || process.env.DB_HOST || 'localhost';
+const dbPort = parseInt(process.env.MYSQLPORT || process.env.DB_PORT || '3306', 10);
+const dbUser = process.env.MYSQLUSER || process.env.DB_USER || 'root';
+const dbPassword = process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || 'admin123';
+const dbName = process.env.MYSQLDATABASE || process.env.DB_NAME || 'gestion_boutique';
+
+const sslOption = (process.env.MYSQLSSL === 'true' || process.env.DB_SSL === 'true' || dbHost.includes('aivencloud.com'))
+  ? { rejectUnauthorized: false }
+  : undefined;
+
+const config = {
+  host: dbHost,
+  port: dbPort,
+  user: dbUser,
+  password: dbPassword,
+  database: dbName,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
-});
+  queueLimit: 0,
+  enableKeepAlive: true,
+  connectTimeout: 30000,
+  ...(sslOption && { ssl: sslOption })
+};
+
+const pool = (process.env.MYSQL_URL || process.env.DATABASE_URL)
+  ? mysql.createPool({
+      uri: process.env.MYSQL_URL || process.env.DATABASE_URL,
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0,
+      enableKeepAlive: true,
+      connectTimeout: 30000,
+      ...(sslOption && { ssl: sslOption })
+    })
+  : mysql.createPool(config);
 
 async function testConnection() {
   try {

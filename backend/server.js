@@ -51,10 +51,6 @@ const limiteurGlobal = rateLimit({
 });
 app.use('/api/', limiteurGlobal);
 
-app.get('/', (req, res) => {
-  res.json({ message: 'API Smart Boutique en ligne !' });
-});
-
 app.use('/api/auth', authRoutes);
 app.use('/api/articles', articlesRoutes);
 app.use('/api/ventes', ventesRoutes);
