@@ -4,10 +4,10 @@ require('dotenv').config();
 const dbHost = process.env.MYSQLHOST || process.env.DB_HOST || 'localhost';
 const dbPort = parseInt(process.env.MYSQLPORT || process.env.DB_PORT || '3306', 10);
 const dbUser = process.env.MYSQLUSER || process.env.DB_USER || 'root';
-const dbPassword = process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || 'admin123';
+const dbPassword = process.env.MYSQLPASSWORD || process.env.MYSQL_PASSWORD || process.env.DB_PASSWORD || 'admin123';
 const dbName = process.env.MYSQLDATABASE || process.env.DB_NAME || 'gestion_boutique';
 
-const sslOption = (process.env.MYSQLSSL === 'true' || process.env.DB_SSL === 'true' || dbHost.includes('aivencloud.com'))
+const sslOption = (process.env.MYSQLSSL === 'true' || process.env.DB_SSL === 'true' || dbHost.includes('aivencloud.com') || dbHost.includes('rlwy.net'))
   ? { rejectUnauthorized: false }
   : undefined;
 
