@@ -320,23 +320,20 @@ router.get('/stats-dashboard', authenticate, async (req, res) => {
 
     const [graph7Jours] = await pool.query(`
       SELECT 
-        DATE_FORMAT(v.created_at, '%d/%m') as date,
-        COUNT(DISTINCT v.id) as nb_ventes,
-        COALESCE(SUM(v.montant_final), 0) as chiffre,
-        COALESCE(SUM((vd.prix_unitaire - a.prix_achat) * vd.quantite), 0) as benefice
-      FROM ventes v
-      LEFT JOIN ventes_details vd ON vd.vente_id = v.id
-      LEFT JOIN articles a ON vd.article_id = a.id
-      WHERE v.boutique_id = ? AND v.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-      GROUP BY DATE(v.created_at), DATE_FORMAT(v.created_at, '%d/%m')
-      ORDER BY DATE(v.created_at) ASC
+        DATE_FORMAT(created_at, '%d/%m') as date,
+        COUNT(*) as nb_ventes,
+        COALESCE(SUM(montant_final), 0) as chiffre
+      FROM ventes
+      WHERE boutique_id = ? AND created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+      GROUP BY DATE(created_at), DATE_FORMAT(created_at, '%d/%m')
+      ORDER BY DATE(created_at) ASC
     `, [boutiqueId]);
 
     const [repartitionCategories] = await pool.query(`
       SELECT 
         COALESCE(a.categorie, 'vetement') as type_produit,
-        SUM(vd.quantite) as quantite_vendue,
-        SUM(vd.prix_unitaire * vd.quantite) as montant_total
+        COALESCE(SUM(vd.quantite), 0) as quantite_vendue,
+        COALESCE(SUM(vd.prix_unitaire * vd.quantite), 0) as montant_total
       FROM ventes_details vd
       JOIN articles a ON vd.article_id = a.id
       JOIN ventes v ON vd.vente_id = v.id
@@ -347,8 +344,8 @@ router.get('/stats-dashboard', authenticate, async (req, res) => {
     const [topProduits] = await pool.query(`
       SELECT 
         a.id, a.nom, a.reference,
-        SUM(vd.quantite) as quantite_vendue,
-        SUM(vd.prix_unitaire * vd.quantite) as total_revenu
+        COALESCE(SUM(vd.quantite), 0) as quantite_vendue,
+        COALESCE(SUM(vd.prix_unitaire * vd.quantite), 0) as total_revenu
       FROM ventes_details vd
       JOIN articles a ON vd.article_id = a.id
       JOIN ventes v ON vd.vente_id = v.id
@@ -413,7 +410,7 @@ router.get('/stats-dashboard', authenticate, async (req, res) => {
 
   } catch (error) {
     console.error('Erreur stats dashboard:', error);
-    res.status(500).json({ message: 'Erreur lors du calcul des statistiques' });
+    res.status(500).json({ message: 'Erreur lors du calcul des statistiques: ' + error.message });
   }
 });
 
