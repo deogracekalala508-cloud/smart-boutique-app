@@ -7,49 +7,13 @@ const router = express.Router();
 
 async function genererNumeroFacture(connection, boutiqueId) {
   const annee = new Date().getFullYear();
+  const timestamp = Date.now().toString().slice(-6);
+  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
 
-  // Chercher la derniere vente enregistree dans toute la base
-  const [maxRow] = await connection.query(
-    'SELECT id, numero_facture FROM ventes ORDER BY id DESC LIMIT 1'
-  );
-
-  let baseNum = 1;
-  if (maxRow.length > 0) {
-    baseNum = Number(maxRow[0].id) + 1;
+  if (boutiqueId && Number(boutiqueId) > 1) {
+    return `FAC-B${boutiqueId}-${annee}-${timestamp}${random}`;
   }
-
-  let numero;
-  let existe = true;
-  let securite = 0;
-
-  // Boucle de verification d'unicite absolue dans MySQL
-  while (existe && securite < 500) {
-    securite++;
-    const numPadded = String(baseNum).padStart(4, '0');
-
-    if (boutiqueId && Number(boutiqueId) > 1) {
-      numero = `FAC-B${boutiqueId}-${annee}-${numPadded}`;
-    } else {
-      numero = `FAC-${annee}-${numPadded}`;
-    }
-
-    const [check] = await connection.query(
-      'SELECT id FROM ventes WHERE numero_facture = ? LIMIT 1',
-      [numero]
-    );
-
-    if (check.length === 0) {
-      existe = false;
-    } else {
-      baseNum++;
-    }
-  }
-
-  if (!numero || existe) {
-    numero = `FAC-${annee}-${Date.now()}`;
-  }
-
-  return numero;
+  return `FAC-${annee}-${timestamp}${random}`;
 }
 
 router.post('/', authenticate, async (req, res) => {

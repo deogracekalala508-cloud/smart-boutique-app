@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
+axios.interceptors.response.use(response => response, error => {
+  if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+    window.dispatchEvent(new Event('token-expired'));
+  }
+  return Promise.reject(error);
+});
+
 const API_URL = 'https://smart-boutique-app-production-bbdb.up.railway.app/api';
 
 const TYPES_PRODUITS = {
@@ -73,7 +80,8 @@ function App() {
   // ─── Vente ────────────────────────────────────────────────────────────────
   const [panier, setPanier] = useState([]);
   const [articleSelectionne, setArticleSelectionne] = useState('');
-  const [quantiteVente, setQuantiteVente] = useState(1);
+  const [quantiteVente, setQuantiteVente] = useState('');
+  const [prixNegocie, setPrixNegocie] = useState('');
   const [derniereFacture, setDerniereFacture] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [venteEnCours, setVenteEnCours] = useState(false);
@@ -144,6 +152,15 @@ function App() {
     setChargement(false);
   }, []);
 
+  useEffect(() => {
+    const handleTokenExpired = () => {
+      handleLogout();
+      alert("Votre session a expiré ou votre compte a été désactivé. Veuillez vous reconnecter.");
+    };
+    window.addEventListener('token-expired', handleTokenExpired);
+    return () => window.removeEventListener('token-expired', handleTokenExpired);
+  }, []);
+
   // ─── Chargement initial des données ───────────────────────────────────────
   const chargerArticles = useCallback(async () => {
     if (!token) return;
@@ -152,8 +169,11 @@ function App() {
         headers: { Authorization: 'Bearer ' + token }
       });
       setArticles(response.data);
+      localStorage.setItem('cachedArticles', JSON.stringify(response.data));
     } catch (error) {
       console.error('Erreur chargement articles:', error);
+      const cached = localStorage.getItem('cachedArticles');
+      if (cached) setArticles(JSON.parse(cached));
     }
   }, [token]);
 
@@ -463,36 +483,48 @@ function App() {
 
   // ─── Vente ────────────────────────────────────────────────────────────────
   const handleAjouterAuPanier = () => {
-    if (!articleSelectionne || quantiteVente < 1) {
+    const qte = parseInt(quantiteVente);
+    if (!articleSelectionne || isNaN(qte) || qte < 1) {
       alert('Sélectionnez un article et une quantité valide'); return;
+    }
+    const prix = parseFloat(prixNegocie);
+    if (isNaN(prix) || prix < 0) {
+      alert('Veuillez entrer un prix valide'); return;
     }
     const article = articles.find(a => a.id === parseInt(articleSelectionne));
     if (!article) { alert('Article introuvable'); return; }
-    if (Number(article.quantite_stock) < quantiteVente) {
+    if (Number(article.quantite_stock) < qte) {
       alert(`Stock insuffisant. Disponible : ${article.quantite_stock}`); return;
     }
-    const dansPanier = panier.find(item => item.article_id === article.id);
+    const dansPanier = panier.find(item => item.article_id === article.id && item.prix_vente === prix);
+    const totalQtePanier = panier.filter(i => i.article_id === article.id).reduce((sum, i) => sum + i.quantite, 0);
+
     if (dansPanier) {
-      const nouvelleQte = dansPanier.quantite + quantiteVente;
-      if (Number(article.quantite_stock) < nouvelleQte) {
-        alert(`Stock insuffisant. Déjà au panier: ${dansPanier.quantite}, Stock disponible: ${article.quantite_stock}`);
+      const nouvelleQte = dansPanier.quantite + qte;
+      if (Number(article.quantite_stock) < (totalQtePanier + qte)) {
+        alert(`Stock insuffisant. Déjà au panier: ${totalQtePanier}, Stock disponible: ${article.quantite_stock}`);
         return;
       }
       setPanier(panier.map(item =>
-        item.article_id === article.id
+        (item.article_id === article.id && item.prix_vente === prix)
           ? { ...item, quantite: nouvelleQte }
           : item
       ));
     } else {
+      if (Number(article.quantite_stock) < (totalQtePanier + qte)) {
+        alert(`Stock insuffisant. Déjà au panier: ${totalQtePanier}, Stock disponible: ${article.quantite_stock}`);
+        return;
+      }
       setPanier([...panier, {
         article_id: article.id,
         nom: article.nom,
-        prix_vente: article.prix_vente,
-        quantite: quantiteVente
+        prix_vente: prix,
+        quantite: qte
       }]);
     }
     setArticleSelectionne('');
-    setQuantiteVente(1);
+    setQuantiteVente('');
+    setPrixNegocie('');
     setErreurVente('');
   };
 
@@ -774,7 +806,18 @@ function App() {
         {/* SÉLECTEUR ARTICLE */}
         <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
           <h3 style={{ fontSize: '15px', color: '#0f172a', marginTop: 0, marginBottom: '14px', fontWeight: '600' }}>Sélection de l'article</h3>
-          <select value={articleSelectionne} onChange={e => setArticleSelectionne(e.target.value)}
+          <select value={articleSelectionne} onChange={e => {
+              const val = e.target.value;
+              setArticleSelectionne(val);
+              const art = articles.find(a => a.id === parseInt(val));
+              if (art) {
+                setPrixNegocie(art.prix_vente);
+                setQuantiteVente('');
+              } else {
+                setPrixNegocie('');
+                setQuantiteVente('');
+              }
+            }}
             style={{ width: '100%', padding: '12px', marginBottom: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }}>
             <option value="">-- Choisir un article en stock --</option>
             {articles.map(article => (
@@ -795,6 +838,12 @@ function App() {
                   Prix unitaire: <strong>{Number(art.prix_vente).toFixed(0)} CDF</strong>
                   {tauxChange > 0 && <span style={{ color: '#64748b' }}> (${(art.prix_vente / tauxChange).toFixed(2)})</span>}
                 </div>
+                {art.prix_achat && (
+                  <div style={{ marginTop: '4px', color: '#d97706' }}>
+                    Prix d'achat: <strong>{Number(art.prix_achat).toFixed(0)} CDF</strong>
+                    {tauxChange > 0 && <span style={{ color: '#64748b' }}> (${(art.prix_achat / tauxChange).toFixed(2)})</span>}
+                  </div>
+                )}
                 <div style={{ marginTop: '4px', fontSize: '12px' }}>
                   Stock disponible: <strong style={{ color: art.quantite_stock <= 5 ? '#dc2626' : '#059669' }}>{art.quantite_stock} unités</strong>
                 </div>
@@ -802,10 +851,19 @@ function App() {
             );
           })()}
 
+          {articleSelectionne && (
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Prix négocié (CDF)</label>
+              <input type="number" placeholder="Prix de vente" value={prixNegocie}
+                onChange={e => setPrixNegocie(e.target.value)}
+                min="0" style={{ width: '100%', padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '15px', boxSizing: 'border-box' }} />
+            </div>
+          )}
+
           <div style={{ marginBottom: '14px' }}>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Quantité à vendre</label>
-            <input type="number" placeholder="Quantité" value={quantiteVente}
-              onChange={e => setQuantiteVente(Math.max(1, parseInt(e.target.value) || 1))}
+            <input type="number" placeholder="0" value={quantiteVente}
+              onChange={e => setQuantiteVente(e.target.value)}
               min="1" style={{ width: '100%', padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '15px', boxSizing: 'border-box' }} />
           </div>
 

@@ -16,10 +16,8 @@ router.get('/', authenticate, async (req, res) => {
       return res.status(400).json({ message: 'Aucune boutique associee a ce compte' });
     }
 
-    // Le vendeur ne doit jamais recevoir prix_achat ni quantite_stock
-    const colonnes = isAdmin
-      ? '*'
-      : 'id, reference, nom, categorie, description, prix_vente, taille, couleur, garantie_mois';
+    // Le vendeur a maintenant le droit de voir le prix d'achat et la quantité en stock
+    const colonnes = '*';
 
     const [articles] = await pool.query(
       `SELECT ${colonnes} FROM articles WHERE actif = true AND boutique_id = ? ORDER BY nom`,
