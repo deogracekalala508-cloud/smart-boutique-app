@@ -57,6 +57,228 @@ function formatMontant(montantCDF, devise, tauxChange) {
   return `${Number(montantCDF).toFixed(0)} CDF`;
 }
 
+// ─── Composant EcranVente (DOIT être DEHORS de App pour éviter le bug du clavier) ─
+// Ce composant reçoit toutes ses props et handlers de App via props
+const EcranVente = ({
+  articles, panier, articleSelectionne, setArticleSelectionne,
+  quantiteVente, setQuantiteVente, prixNegocie, setPrixNegocie,
+  devise, tauxChange, toggleDevise,
+  showSuccess, derniereFacture, erreurVente, venteEnCours,
+  handleAjouterAuPanier, handleRetirerDuPanier, handleValiderVente,
+  handleImprimerFacture, setShowSuccess, totalPanierCDF,
+  ventesOffline, isSyncing
+}) => {
+  const artSelectionne = articles.find(a => a.id === parseInt(articleSelectionne));
+  return (
+    <div>
+      {/* Bandeau hors ligne */}
+      {ventesOffline && ventesOffline.length > 0 && (
+        <div style={{ background: '#d97706', color: 'white', padding: '8px 14px', borderRadius: '8px', marginBottom: '12px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>⚠️</span>
+          <span>{isSyncing ? 'Synchronisation en cours...' : `${ventesOffline.length} vente(s) enregistrée(s) hors ligne — seront envoyées à la reconnexion.`}</span>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <SVGIcon name="cart" size={22} color="#0f172a" />
+          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700', color: '#0f172a' }}>Nouvelle Vente</h2>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'white', padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+          <span style={{ fontSize: '13px', color: '#64748b', fontWeight: '500' }}>Devise :</span>
+          <button onClick={toggleDevise} style={{ padding: '6px 12px', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '12px', background: '#4f46e5', color: 'white' }}>
+            {devise === 'CDF' ? 'CDF (Franc)' : 'USD (Dollar)'}
+          </button>
+          <span style={{ fontWeight: '600', fontSize: '12px', color: '#334155' }}>
+            1 USD = {tauxChange} CDF
+          </span>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+        {/* SÉLECTEUR ARTICLE */}
+        <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
+          <h3 style={{ fontSize: '15px', color: '#0f172a', marginTop: 0, marginBottom: '14px', fontWeight: '600' }}>Sélection de l'article</h3>
+          <select value={articleSelectionne} onChange={e => {
+            const val = e.target.value;
+            setArticleSelectionne(val);
+            const art = articles.find(a => a.id === parseInt(val));
+            if (art) {
+              setPrixNegocie(String(art.prix_vente));
+              setQuantiteVente('');
+            } else {
+              setPrixNegocie('');
+              setQuantiteVente('');
+            }
+          }}
+            style={{ width: '100%', padding: '12px', marginBottom: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', boxSizing: 'border-box' }}>
+            <option value="">-- Choisir un article en stock --</option>
+            {articles.map(article => (
+              <option key={article.id} value={article.id}>
+                {article.nom} — {formatMontant(article.prix_vente, devise, tauxChange)} (Stock: {article.quantite_stock})
+              </option>
+            ))}
+          </select>
+
+          {/* Aperçu article sélectionné */}
+          {artSelectionne && (
+            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', marginBottom: '14px', fontSize: '13px', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontWeight: '600', color: '#0f172a' }}>{artSelectionne.nom}</div>
+              <div style={{ marginTop: '4px', color: '#475569' }}>
+                Prix catalogue: <strong>{Number(artSelectionne.prix_vente).toFixed(0)} CDF</strong>
+                {tauxChange > 0 && <span style={{ color: '#64748b' }}> (${(artSelectionne.prix_vente / tauxChange).toFixed(2)})</span>}
+              </div>
+              {artSelectionne.prix_achat && (
+                <div style={{ marginTop: '4px', color: '#d97706' }}>
+                  Prix d'achat: <strong>{Number(artSelectionne.prix_achat).toFixed(0)} CDF</strong>
+                  {tauxChange > 0 && <span style={{ color: '#64748b' }}> (${(artSelectionne.prix_achat / tauxChange).toFixed(2)})</span>}
+                </div>
+              )}
+              <div style={{ marginTop: '4px', fontSize: '12px' }}>
+                Stock disponible: <strong style={{ color: artSelectionne.quantite_stock <= 5 ? '#dc2626' : '#059669' }}>{artSelectionne.quantite_stock} unités</strong>
+              </div>
+            </div>
+          )}
+
+          {articleSelectionne && (
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Prix négocié (CDF)</label>
+              <input
+                type="number"
+                placeholder="Prix de vente"
+                value={prixNegocie}
+                onChange={e => setPrixNegocie(e.target.value)}
+                min="0"
+                style={{ width: '100%', padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '15px', boxSizing: 'border-box' }}
+              />
+            </div>
+          )}
+
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Quantité à vendre</label>
+            <input
+              type="number"
+              placeholder="0"
+              value={quantiteVente}
+              onChange={e => setQuantiteVente(e.target.value)}
+              min="1"
+              style={{ width: '100%', padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '15px', boxSizing: 'border-box' }}
+            />
+          </div>
+
+          <button onClick={handleAjouterAuPanier}
+            style={{ width: '100%', padding: '12px', background: '#059669', color: 'white', border: 'none', borderRadius: '8px', fontSize: '15px', cursor: 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <SVGIcon name="plus" size={18} color="white" /> Ajouter au panier
+          </button>
+        </div>
+
+        {/* PANIER */}
+        <div style={{ background: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
+          <h3 style={{ fontSize: '15px', color: '#0f172a', marginTop: 0, marginBottom: '14px', fontWeight: '600' }}>Panier de vente</h3>
+
+          {panier.length === 0 && !showSuccess ? (
+            <div style={{ color: '#94a3b8', textAlign: 'center', padding: '40px 0', fontSize: '14px' }}>
+              <SVGIcon name="cart" size={32} color="#cbd5e1" />
+              <p style={{ margin: '8px 0 0 0' }}>Votre panier est vide</p>
+            </div>
+          ) : panier.length > 0 ? (
+            <div>
+              <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      <th style={{ textAlign: 'left', padding: '8px 10px' }}>Article</th>
+                      <th style={{ textAlign: 'center', padding: '8px 10px' }}>Qté</th>
+                      <th style={{ textAlign: 'right', padding: '8px 10px' }}>Prix CDF</th>
+                      <th style={{ textAlign: 'right', padding: '8px 10px' }}>USD</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {panier.map((item, idx) => {
+                      const totalItemCDF = Number(item.prix_vente) * item.quantite;
+                      const totalItemUSD = tauxChange > 0 ? (totalItemCDF / tauxChange).toFixed(2) : '—';
+                      return (
+                        <tr key={`${item.article_id}-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '8px 10px', fontWeight: '500' }}>{item.nom}</td>
+                          <td style={{ textAlign: 'center', padding: '8px 10px' }}>{item.quantite}</td>
+                          <td style={{ textAlign: 'right', padding: '8px 10px', fontWeight: '600' }}>{totalItemCDF.toFixed(0)} CDF</td>
+                          <td style={{ textAlign: 'right', padding: '8px 10px', color: '#64748b' }}>${totalItemUSD}</td>
+                          <td style={{ textAlign: 'center', padding: '8px 10px' }}>
+                            <button onClick={() => handleRetirerDuPanier(item.article_id)}
+                              style={{ padding: '4px 6px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>
+                              <SVGIcon name="close" size={14} color="#dc2626" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ borderTop: '2px solid #f1f5f9', paddingTop: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px' }}>
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>TOTAL À PAYER</div>
+                    <div style={{ fontSize: '24px', fontWeight: '700', color: '#0f172a' }}>{totalPanierCDF.toFixed(0)} CDF</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>ÉQUIVALENT USD</div>
+                    <div style={{ fontSize: '24px', fontWeight: '700', color: '#d97706' }}>
+                      ${tauxChange > 0 ? (totalPanierCDF / tauxChange).toFixed(2) : '—'}
+                    </div>
+                  </div>
+                </div>
+
+                {erreurVente && (
+                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', color: '#dc2626', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <SVGIcon name="alert" size={16} color="#dc2626" />
+                    <span>{erreurVente}</span>
+                  </div>
+                )}
+
+                <button onClick={handleValiderVente} disabled={venteEnCours}
+                  style={{ width: '100%', padding: '14px', background: venteEnCours ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: '8px', fontSize: '16px', cursor: venteEnCours ? 'not-allowed' : 'pointer', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(5,150,105,0.3)' }}>
+                  {venteEnCours ? (
+                    <>⏳ Validation en cours...</>
+                  ) : (
+                    <><SVGIcon name="check" size={20} color="white" /> Valider la vente</>
+                  )}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {showSuccess && derniereFacture && (
+            <div style={{ background: '#ecfdf5', padding: '20px', borderRadius: '10px', marginTop: '16px', border: '1px solid #a7f3d0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                <SVGIcon name="check" size={24} color="#047857" />
+                <h3 style={{ color: '#047857', margin: 0, fontSize: '18px', fontWeight: '700' }}>Vente enregistrée avec succès</h3>
+              </div>
+              <p style={{ margin: '4px 0', fontSize: '14px' }}><strong>N° Facture :</strong> {derniereFacture.numero_facture || 'Hors ligne'}</p>
+              <p style={{ margin: '4px 0', fontSize: '14px' }}>
+                <strong>Montant :</strong> {Number(derniereFacture.montant_total || 0).toFixed(0)} CDF
+                {tauxChange > 0 && <span> (${(derniereFacture.montant_total / tauxChange).toFixed(2)})</span>}
+              </p>
+              {derniereFacture.numero_facture && (
+                <button onClick={() => handleImprimerFacture(derniereFacture.numero_facture)}
+                  style={{ width: '100%', padding: '12px', background: '#0f172a', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', marginTop: '14px', fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <SVGIcon name="print" size={16} color="white" /> Imprimer la facture
+                </button>
+              )}
+              <button onClick={() => setShowSuccess(false)}
+                style={{ width: '100%', padding: '10px', background: 'transparent', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', marginTop: '8px', fontSize: '13px' }}>
+                Fermer et faire une nouvelle vente
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function App() {
   // ─── Auth ──────────────────────────────────────────────────────────────────
   const [chargement, setChargement] = useState(true);
@@ -86,6 +308,15 @@ function App() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [venteEnCours, setVenteEnCours] = useState(false);
   const [erreurVente, setErreurVente] = useState('');
+
+  // ─── Offline / PWA ────────────────────────────────────────────────────────
+  const [ventesOffline, setVentesOffline] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('ventesOffline') || '[]'); } catch { return []; }
+  });
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
   // ─── Multi-devises ────────────────────────────────────────────────────────
   const [devise, setDevise] = useState('CDF');   // 'CDF' ou 'USD'
@@ -152,6 +383,84 @@ function App() {
     setChargement(false);
   }, []);
 
+  // ─── Enregistrement Service Worker ────────────────────────────────────────
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .then(reg => {
+          console.log('SW enregistré:', reg.scope);
+        }).catch(err => console.log('SW erreur:', err));
+
+      // Écouter les messages du SW (sync offline)
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'SYNC_OFFLINE_SALES') {
+          syncVentesOffline();
+        }
+      });
+    }
+  }, []);
+
+  // ─── PWA Install Prompt ───────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      setShowInstallBanner(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') setShowInstallBanner(false);
+    setInstallPrompt(null);
+  };
+
+  // ─── Détection Online/Offline ─────────────────────────────────────────────
+  useEffect(() => {
+    const goOnline = () => {
+      setIsOffline(false);
+      syncVentesOffline();
+    };
+    const goOffline = () => setIsOffline(true);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
+  // ─── Synchronisation ventes offline ──────────────────────────────────────
+  const syncVentesOffline = useCallback(async () => {
+    const pending = JSON.parse(localStorage.getItem('ventesOffline') || '[]');
+    if (pending.length === 0) return;
+    const tok = localStorage.getItem('token');
+    if (!tok || !navigator.onLine) return;
+
+    setIsSyncing(true);
+    const restantes = [];
+    for (const vente of pending) {
+      try {
+        await axios.post(API_URL + '/ventes', vente, {
+          headers: { Authorization: 'Bearer ' + tok }
+        });
+      } catch (e) {
+        restantes.push(vente);
+      }
+    }
+    localStorage.setItem('ventesOffline', JSON.stringify(restantes));
+    setVentesOffline(restantes);
+    setIsSyncing(false);
+    if (restantes.length === 0 && pending.length > 0) {
+      alert(`${pending.length - restantes.length} vente(s) hors ligne synchronisée(s) avec succès.`);
+    }
+  }, []);
+
+  // ─── Token expiry listener ────────────────────────────────────────────────
   useEffect(() => {
     const handleTokenExpired = () => {
       handleLogout();
@@ -540,6 +849,26 @@ function App() {
     setVenteEnCours(true);
     setErreurVente('');
 
+    if (!navigator.onLine) {
+      // Mode hors ligne : sauvegarder la vente localement
+      const venteLoc = {
+        articles: panier,
+        mode_paiement: 'especes',
+        devise: 'CDF',
+        _timestamp: Date.now()
+      };
+      const montantTotal = panier.reduce((s, i) => s + Number(i.prix_vente) * i.quantite, 0);
+      const nouvListe = [...ventesOffline, venteLoc];
+      localStorage.setItem('ventesOffline', JSON.stringify(nouvListe));
+      setVentesOffline(nouvListe);
+      setDerniereFacture({ montant_total: montantTotal, numero_facture: null });
+      setShowSuccess(true);
+      setPanier([]);
+      setErreurVente('');
+      setVenteEnCours(false);
+      return;
+    }
+
     try {
       const response = await axios.post(API_URL + '/ventes', {
         articles: panier,
@@ -561,7 +890,17 @@ function App() {
       if (error.response && error.response.data && error.response.data.message) {
         msg = error.response.data.message;
       } else if (!error.response) {
-        msg = 'Impossible de contacter le serveur. Vérifiez votre connexion internet.';
+        // Pas de réponse → sauvegarder hors ligne
+        const venteLoc = { articles: panier, mode_paiement: 'especes', devise: 'CDF', _timestamp: Date.now() };
+        const montantTotal = panier.reduce((s, i) => s + Number(i.prix_vente) * i.quantite, 0);
+        const nouvListe = [...ventesOffline, venteLoc];
+        localStorage.setItem('ventesOffline', JSON.stringify(nouvListe));
+        setVentesOffline(nouvListe);
+        setDerniereFacture({ montant_total: montantTotal, numero_facture: null });
+        setShowSuccess(true);
+        setPanier([]);
+        setVenteEnCours(false);
+        return;
       }
       setErreurVente(msg);
     } finally {
@@ -626,16 +965,26 @@ function App() {
   const attr1Label = TYPES_PRODUITS[typeActuel]?.attr1 || 'Attribut 1';
   const attr2Label = TYPES_PRODUITS[typeActuel]?.attr2 || 'Attribut 2';
 
+  // Props communes pour EcranVente
+  const ecranVenteProps = {
+    articles, panier, articleSelectionne, setArticleSelectionne,
+    quantiteVente, setQuantiteVente, prixNegocie, setPrixNegocie,
+    devise, tauxChange, toggleDevise,
+    showSuccess, derniereFacture, erreurVente, venteEnCours,
+    handleAjouterAuPanier, handleRetirerDuPanier, handleValiderVente,
+    handleImprimerFacture, setShowSuccess, totalPanierCDF,
+    ventesOffline, isSyncing
+  };
+
   // ──────────────────────────────────────────────────────────────────────────
   // CHARGEMENT INITIAL
   // ──────────────────────────────────────────────────────────────────────────
   if (chargement) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#0f172a', color: 'white' }}>
-        <div style={{ textAlign: 'center' }}>
-          <SVGIcon name="store" size={48} color="#6366f1" />
-          <h2 style={{ fontSize: '20px', margin: '16px 0 0 0', fontWeight: '600' }}>Chargement de Smart Boutique...</h2>
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#0f172a', color: 'white', flexDirection: 'column', gap: '16px' }}>
+        <SVGIcon name="store" size={48} color="#6366f1" />
+        <h2 style={{ fontSize: '20px', margin: 0, fontWeight: '600' }}>Chargement de Smart Boutique...</h2>
+        {isOffline && <p style={{ color: '#94a3b8', fontSize: '14px', margin: 0 }}>Mode hors ligne — données locales chargées</p>}
       </div>
     );
   }
@@ -645,7 +994,25 @@ function App() {
   // ──────────────────────────────────────────────────────────────────────────
   if (!connecte) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', padding: '20px', boxSizing: 'border-box' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', padding: '20px', boxSizing: 'border-box', flexDirection: 'column', gap: '12px' }}>
+
+        {/* Bannière d'installation PWA */}
+        {showInstallBanner && (
+          <div style={{ background: '#4f46e5', color: 'white', borderRadius: '12px', padding: '14px 18px', maxWidth: '440px', width: '100%', display: 'flex', alignItems: 'center', gap: '12px', boxSizing: 'border-box', boxShadow: '0 8px 24px rgba(79,70,229,0.4)' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: '700', fontSize: '14px' }}>📲 Installer Smart Boutique</div>
+              <div style={{ fontSize: '12px', color: '#c7d2fe', marginTop: '2px' }}>Accédez à l'application sans connexion depuis votre écran d'accueil</div>
+            </div>
+            <button onClick={handleInstallApp} style={{ background: 'white', color: '#4f46e5', border: 'none', borderRadius: '8px', padding: '8px 14px', fontWeight: '700', cursor: 'pointer', fontSize: '13px', whiteSpace: 'nowrap' }}>Installer</button>
+            <button onClick={() => setShowInstallBanner(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '0 4px' }}>✕</button>
+          </div>
+        )}
+
+        {isOffline && (
+          <div style={{ background: '#d97706', color: 'white', borderRadius: '10px', padding: '10px 16px', maxWidth: '440px', width: '100%', textAlign: 'center', fontSize: '13px', fontWeight: '600', boxSizing: 'border-box' }}>
+            ⚠️ Vous êtes hors ligne — Connectez-vous pour accéder à l'application
+          </div>
+        )}
         <div style={{ background: 'white', padding: '36px', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', width: '100%', maxWidth: '440px', boxSizing: 'border-box' }}>
           <div style={{ textAlign: 'center', marginBottom: '28px' }}>
             <div style={{ background: '#4f46e5', width: '56px', height: '56px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px auto', boxShadow: '0 10px 20px rgba(79,70,229,0.3)' }}>
@@ -994,7 +1361,17 @@ function App() {
           </div>
         </div>
         <div style={{ padding: '20px', maxWidth: '1100px', margin: '0 auto' }}>
-          <EcranVente />
+          {/* Bannière install PWA pour vendeur */}
+          {showInstallBanner && (
+            <div style={{ background: '#4f46e5', color: 'white', borderRadius: '12px', padding: '12px 16px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ flex: 1, fontSize: '13px' }}>
+                <strong>📲 Installer l'application</strong> — Accédez à Smart Boutique même hors ligne
+              </div>
+              <button onClick={handleInstallApp} style={{ background: 'white', color: '#4f46e5', border: 'none', borderRadius: '6px', padding: '6px 12px', fontWeight: '700', cursor: 'pointer', fontSize: '12px' }}>Installer</button>
+              <button onClick={() => setShowInstallBanner(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '16px' }}>✕</button>
+            </div>
+          )}
+          <EcranVente {...ecranVenteProps} />
         </div>
       </div>
     );
@@ -1287,7 +1664,7 @@ function App() {
         )}
 
         {/* ── VENTE ─────────────────────────────────────────────────────── */}
-        {ongletActif === 'vente' && <EcranVente />}
+        {ongletActif === 'vente' && <EcranVente {...ecranVenteProps} />}
 
         {/* ── HISTORIQUE ────────────────────────────────────────────────── */}
         {ongletActif === 'historique' && (
