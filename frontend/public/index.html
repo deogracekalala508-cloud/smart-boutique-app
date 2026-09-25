@@ -3,6 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <meta name="theme-color" content="#0f172a" />
     <meta name="description" content="Smart Boutique - Application de gestion commerciale et stocks. Installez l'application pour un accès rapide même hors ligne." />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -15,8 +18,28 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <title>Smart Boutique - Gestion Commerciale</title>
+    <script>
+      // Récupération automatique si une ancienne version du JS ou du Service Worker cause un écran blanc
+      window.addEventListener('error', function(e) {
+        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+          console.warn('Ressource obsolète en cache détectée. Nettoyage et rechargement...');
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              for (var i = 0; i < regs.length; i++) { regs[i].unregister(); }
+              if ('caches' in window) {
+                caches.keys().then(function(names) {
+                  for (var name of names) caches.delete(name);
+                  window.location.reload(true);
+                });
+              } else {
+                window.location.reload(true);
+              }
+            });
+          }
+        }
+      }, true);
+    </script>
     <style>
-      /* Icônes SVG inline pour PWA (évite le flash de contenu manquant) */
       * { box-sizing: border-box; }
       body { margin: 0; padding: 0; background-color: #0f172a; }
       #root { min-height: 100vh; }
@@ -26,21 +49,17 @@
     <noscript>Vous devez activer JavaScript pour utiliser Smart Boutique.</noscript>
     <div id="root"></div>
     <script>
-      // Génération dynamique des icônes PWA si pas encore créées
       function generateAndCacheIcon(size) {
         var canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
+        canvas.width = size; canvas.height = size;
         var ctx = canvas.getContext('2d');
-        // Fond dégradé
         var grad = ctx.createLinearGradient(0, 0, size, size);
         grad.addColorStop(0, '#4f46e5');
         grad.addColorStop(1, '#0f172a');
         ctx.fillStyle = grad;
         var r = size * 0.2;
         ctx.beginPath();
-        ctx.moveTo(r, 0);
-        ctx.lineTo(size - r, 0);
+        ctx.moveTo(r, 0); ctx.lineTo(size - r, 0);
         ctx.quadraticCurveTo(size, 0, size, r);
         ctx.lineTo(size, size - r);
         ctx.quadraticCurveTo(size, size, size - r, size);
@@ -48,13 +67,10 @@
         ctx.quadraticCurveTo(0, size, 0, size - r);
         ctx.lineTo(0, r);
         ctx.quadraticCurveTo(0, 0, r, 0);
-        ctx.closePath();
-        ctx.fill();
-        // Lettre S au centre
+        ctx.closePath(); ctx.fill();
         ctx.fillStyle = 'white';
         ctx.font = 'bold ' + Math.round(size * 0.5) + 'px Inter, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('SB', size / 2, size / 2);
         return canvas.toDataURL('image/png');
       }
