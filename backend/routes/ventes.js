@@ -58,10 +58,12 @@ router.post('/', authenticate, async (req, res) => {
           throw new Error(`Stock insuffisant pour ${art.nom}. Stock: ${art.quantite_stock}`);
         }
 
-        montantTotal += Number(art.prix_vente) * Number(ligne.quantite);
-        beneficeTotal += (Number(art.prix_vente) - Number(art.prix_achat)) * Number(ligne.quantite);
+        const prixEffectif = (ligne.prix_vente !== undefined && !isNaN(Number(ligne.prix_vente))) ? Number(ligne.prix_vente) : Number(art.prix_vente);
 
-        articlesValides.push({ ...ligne, prix_vente: art.prix_vente });
+        montantTotal += prixEffectif * Number(ligne.quantite);
+        beneficeTotal += (prixEffectif - Number(art.prix_achat)) * Number(ligne.quantite);
+
+        articlesValides.push({ ...ligne, prix_vente: prixEffectif });
       }
 
       const [venteResult] = await connection.query(
